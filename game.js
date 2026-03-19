@@ -738,3 +738,40 @@ window.submitNightAction = () => game.submitNightAction();
 window.submitVote = () => game.submitVote();
 window.sendChat = () => game.sendChat();
 window.handleChatKey = (e) => game.handleChatKey(e);
+window.showVersionInfo = () => game.showVersionInfo();
+
+// Add version info method to WerewolfGame prototype
+WerewolfGame.prototype.showVersionInfo = function() {
+    const versionInfo = `
+🐺 Ma Sói Online - Version History
+
+v0.3.0-beta (Current)
+- 🔒 SECURITY: Fixed XSS vulnerabilities (critical)
+- 🏆 FEATURE: Win condition detection & game over screen
+- 🧙 FEATURE: Enhanced Witch UI (heal/poison toggle)
+- ⚠️ FEATURE: Host disconnect handling
+- ✅ IMPROVE: Connection validation before actions
+- ✅ IMPROVE: All user input sanitized
+
+v0.2.0-beta
+- 🌐 Multiplayer online with PeerJS WebRTC
+- 🏠 Room system (create/join with codes)
+- 🎭 Role assignment (7 roles)
+- 🌙 Night phase actions
+- ☀️ Day phase voting
+- 💬 Real-time chat
+- 📱 Responsive mobile UI
+
+v0.1.0-alpha
+- 🎮 Single-player local version
+- Basic game flow
+- 7 roles implemented
+
+---
+Total Commits: 5
+Last Updated: ${new Date().toLocaleDateString('vi-VN')}
+Status: Beta Testing
+    `;
+    
+    alert(versionInfo);
+};

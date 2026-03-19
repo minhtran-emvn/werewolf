@@ -405,6 +405,38 @@
             to { transform: translateX(0); opacity: 1; }
         }
 
+        /* Version Badge */
+        .version-badge {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(233, 69, 96, 0.9);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 0.75em;
+            font-weight: bold;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .version-badge .beta-tag {
+            background: rgba(251, 191, 36, 0.9);
+            color: #000;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            text-transform: uppercase;
+        }
+
+        .version-badge:hover {
+            background: rgba(233, 69, 96, 1);
+            cursor: pointer;
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             header h1 {
@@ -413,6 +445,13 @@
 
             .lobby-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .version-badge {
+                bottom: 5px;
+                right: 5px;
+                padding: 6px 10px;
+                font-size: 0.7em;
             }
         }
     </style>
@@ -544,6 +583,12 @@
                 <button class="btn btn-primary" onclick="location.reload()">🔄 Chơi lại</button>
             </div>
         </section>
+    </div>
+
+    <!-- Version Badge -->
+    <div class="version-badge" title="Click to see changelog" onclick="showVersionInfo()">
+        <span>v0.3.0-beta</span>
+        <span class="beta-tag">BETA</span>
     </div>
 
     <!-- Scripts -->
