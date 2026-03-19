@@ -16,3 +16,13 @@ npm-debug.log*
 
 # OS
 Thumbs.db
+
+# Node.js (added by tests)
+node_modules/
+package-lock.json
+package.json
+playwright.config.js
+
+# Test results
+test-results/
+e2e/
