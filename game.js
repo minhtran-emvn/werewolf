@@ -774,7 +774,13 @@ WerewolfGame.prototype.showVersionInfo = function() {
     const versionInfo = `
 🐺 Ma Sói Online - Version History
 
-v0.3.0-beta (Current)
+v0.4.0-beta (Current)
+- 👥 Removed 5-player minimum - play with any number (1+)
+- 🖥️ Fixed: Host now sees players joining in real-time
+- 🔒 Only allow joining existing rooms (5s timeout)
+- 📝 Better error messages for invalid rooms
+
+v0.3.0-beta
 - 🔒 SECURITY: Fixed XSS vulnerabilities (critical)
 - 🏆 FEATURE: Win condition detection & game over screen
 - 🧙 FEATURE: Enhanced Witch UI (heal/poison toggle)
@@ -797,7 +803,7 @@ v0.1.0-alpha
 - 7 roles implemented
 
 ---
-Total Commits: 5
+Total Commits: 7
 Last Updated: ${new Date().toLocaleDateString('vi-VN')}
 Status: Beta Testing
     `;
