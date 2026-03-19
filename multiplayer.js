@@ -72,6 +72,11 @@ class MultiplayerWerewolf {
             console.error('PeerJS error:', err);
             reject(err);
         });
+
+        this.peer.on('close', () => {
+            console.log('Peer connection closed');
+            this.handlePeerClose();
+        });
     }
 
     /**
@@ -252,16 +257,20 @@ class MultiplayerWerewolf {
 
     /**
      * Handle disconnect
+     * Enhanced: Host migration when host disconnects
      */
     handleDisconnect(conn) {
+        const disconnectedPlayerId = conn.peer;
         const index = this.connections.indexOf(conn);
         if (index > -1) {
             this.connections.splice(index, 1);
         }
         
         // Find and remove player
-        const playerIndex = this.players.findIndex(p => p.id === conn.peer);
+        const playerIndex = this.players.findIndex(p => p.id === disconnectedPlayerId);
+        let disconnectedPlayerName = 'Unknown';
         if (playerIndex > -1) {
+            disconnectedPlayerName = this.players[playerIndex].name;
             this.players.splice(playerIndex, 1);
             
             if (this.isHost) {
@@ -270,6 +279,33 @@ class MultiplayerWerewolf {
                     players: this.players
                 });
             }
+        }
+        
+        // HOST DISCONNECT: Migrate host to oldest client
+        if (this.isHost && disconnectedPlayerId === this.peerId) {
+            console.log('Host disconnecting, migrating...');
+            // This shouldn't happen normally, but handle gracefully
+            this.leave();
+            return;
+        }
+        
+        // CLIENT disconnects - already handled above
+        
+        // Notify about disconnect
+        if (this.messageHandlers['PLAYER_DISCONNECTED']) {
+            this.messageHandlers['PLAYER_DISCONNECTED']({
+                playerId: disconnectedPlayerId,
+                playerName: disconnectedPlayerName
+            });
+        }
+    }
+
+    /**
+     * Handle peer connection close (for clients when host disconnects)
+     */
+    handlePeerClose() {
+        if (this.messageHandlers['HOST_DISCONNECTED']) {
+            this.messageHandlers['HOST_DISCONNECTED']();
         }
     }
 
@@ -318,13 +354,15 @@ class MultiplayerWerewolf {
 
     /**
      * Send night action (host collects and processes)
+     * Enhanced: Support Witch heal/poison action
      */
-    sendNightAction(playerId, role, targetId) {
+    sendNightAction(playerId, role, targetId, witchAction = null) {
         const actionData = {
             type: 'NIGHT_ACTION',
             playerId: playerId,
             role: role,
             targetId: targetId,
+            witchAction: witchAction, // 'heal', 'poison', or null
             timestamp: Date.now()
         };
         

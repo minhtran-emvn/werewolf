@@ -1,6 +1,8 @@
 /**
  * Werewolf Game Logic
  * Handles game state, roles, and player actions
+ * 
+ * SECURITY: All user input is sanitized before DOM insertion
  */
 
 class WerewolfGame {
@@ -15,6 +17,12 @@ class WerewolfGame {
         this.dayCount = 0;
         this.selectedPlayer = null;
         this.actionsReceived = {};
+        this.winner = null;
+        
+        // Witch state
+        this.witchHasHeal = true;
+        this.witchHasPoison = true;
+        this.witchAction = null; // 'heal', 'poison', or null
         
         // Role configurations
         this.ROLES = {
@@ -28,6 +36,18 @@ class WerewolfGame {
         };
 
         this.setupMultiplayerHandlers();
+    }
+
+    /**
+     * Sanitize user input to prevent XSS attacks
+     * @param {string} str - Raw user input
+     * @returns {string} - Sanitized string safe for HTML insertion
+     */
+    sanitize(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
     }
 
     /**
@@ -71,6 +91,32 @@ class WerewolfGame {
         // Handle votes (host only)
         this.multiplayer.on('VOTE', (data) => {
             this.handleVote(data);
+        });
+
+        // Handle game over (all players)
+        this.multiplayer.on('GAME_OVER', (data) => {
+            this.handleGameOver(data);
+        });
+
+        // Handle player disconnected
+        this.multiplayer.on('PLAYER_DISCONNECTED', (data) => {
+            this.addGameLog(`❌ ${data.playerName} đã rời phòng`);
+            this.showNotification(`${data.playerName} đã rời phòng`);
+        });
+
+        // Handle host disconnected (clients only)
+        this.multiplayer.on('HOST_DISCONNECTED', () => {
+            this.addGameLog('⚠️ Chủ phòng đã rời! Trò chơi không thể tiếp tục.');
+            this.showNotification('⚠️ Chủ phòng đã rời! Vui lòng tạo phòng mới.');
+            // Disable game controls
+            const actionButtons = document.getElementById('action-buttons');
+            if (actionButtons) {
+                actionButtons.innerHTML = `
+                    <p style="color: #e94560; font-weight: bold;">
+                        ⚠️ Chủ phòng đã rời. Trò chơi kết thúc.
+                    </p>
+                `;
+            }
         });
     }
 
@@ -130,6 +176,7 @@ class WerewolfGame {
 
     /**
      * Update player list UI
+     * SECURITY: Sanitize player names to prevent XSS
      */
     updatePlayerList() {
         const playerList = document.getElementById('player-list');
@@ -139,7 +186,7 @@ class WerewolfGame {
             <div class="player-item ${player.isHost ? 'host' : ''}">
                 <div class="player-status">
                     <span class="online"></span>
-                    <span>${player.name} ${player.isHost ? '👑' : ''}</span>
+                    <span>${this.sanitize(player.name)} ${player.isHost ? '👑' : ''}</span>
                 </div>
                 <span style="color: #666;">#${index + 1}</span>
             </div>
@@ -305,11 +352,44 @@ class WerewolfGame {
 
     /**
      * Setup night action buttons
+     * Enhanced Witch UI with heal/poison toggle
      */
     setupNightActions() {
         const actionButtons = document.getElementById('action-buttons');
         
-        if (['werewolf', 'seer', 'witch', 'guard'].includes(this.myRole)) {
+        if (this.myRole === 'witch') {
+            // Enhanced Witch UI with heal/poison selection
+            const hasAnyPotion = this.witchHasHeal || this.witchHasPoison;
+            
+            if (!hasAnyPotion) {
+                actionButtons.innerHTML = `
+                    <p style="color: #aaa;">🧙 Bạn đã hết thuốc!</p>
+                `;
+            } else {
+                actionButtons.innerHTML = `
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        ${this.witchHasHeal ? `
+                            <button class="btn ${this.witchAction === 'heal' ? 'btn-primary' : 'btn-secondary'}" 
+                                    onclick="game.setWitchAction('heal')">
+                                💚 Cứu (Thuốc giải)
+                            </button>
+                        ` : ''}
+                        ${this.witchHasPoison ? `
+                            <button class="btn ${this.witchAction === 'poison' ? 'btn-primary' : 'btn-secondary'}" 
+                                    onclick="game.setWitchAction('poison')">
+                                ☠️ Giết (Thuốc độc)
+                            </button>
+                        ` : ''}
+                        <button class="btn btn-primary" onclick="game.submitNightAction()">
+                            ✅ Xác nhận
+                        </button>
+                    </div>
+                    <p style="color: #aaa; margin-top: 10px; font-size: 0.9em;">
+                        Chọn thuốc, sau đó chọn người để sử dụng
+                    </p>
+                `;
+            }
+        } else if (['werewolf', 'seer', 'guard'].includes(this.myRole)) {
             actionButtons.innerHTML = `
                 <button class="btn btn-primary" onclick="game.submitNightAction()">
                     ✅ Xác nhận hành động
@@ -320,6 +400,18 @@ class WerewolfGame {
                 <p style="color: #aaa;">🌙 Bạn là dân làng. Hãy chờ và quan sát...</p>
             `;
         }
+    }
+
+    /**
+     * Set Witch action (heal or poison)
+     */
+    setWitchAction(action) {
+        if (action === 'heal' && !this.witchHasHeal) return;
+        if (action === 'poison' && !this.witchHasPoison) return;
+        
+        this.witchAction = action;
+        this.setupNightActions();
+        this.showNotification(action === 'heal' ? '💚 Đã chọn thuốc giải' : '☠️ Đã chọn thuốc độc');
     }
 
     /**
@@ -336,6 +428,7 @@ class WerewolfGame {
 
     /**
      * Update players grid
+     * SECURITY: Sanitize player names to prevent XSS
      */
     updatePlayersGrid() {
         const grid = document.getElementById('players-grid');
@@ -350,7 +443,7 @@ class WerewolfGame {
                      onclick="game.selectPlayer(${player.id})">
                     <div class="status">${isDead ? '☠️' : '✅'}</div>
                     <div class="avatar">👤</div>
-                    <div style="font-weight: bold;">${player.name}</div>
+                    <div style="font-weight: bold;">${this.sanitize(player.name)}</div>
                     <div style="color: #aaa; font-size: 0.9em;">#${index + 1}</div>
                 </div>
             `;
@@ -372,10 +465,43 @@ class WerewolfGame {
 
     /**
      * Submit night action
+     * SECURITY: Validate connection state before sending
+     * Enhanced: Handle Witch heal/poison selection
      */
     submitNightAction() {
+        // Handle Witch special case
+        if (this.myRole === 'witch' && this.witchAction) {
+            if (!this.selectedPlayer) {
+                this.showNotification('❌ Chọn một người để sử dụng thuốc!');
+                return;
+            }
+            
+            // Mark potion as used
+            if (this.witchAction === 'heal') {
+                this.witchHasHeal = false;
+                this.showNotification('💚 Đã sử dụng thuốc giải!');
+            } else if (this.witchAction === 'poison') {
+                this.witchHasPoison = false;
+                this.showNotification('☠️ Đã sử dụng thuốc độc!');
+            }
+            
+            this.multiplayer.sendNightAction(this.myPlayerId, this.myRole, this.selectedPlayer, this.witchAction);
+            this.witchAction = null;
+            this.selectedPlayer = null;
+            this.setupNightActions();
+            this.updatePlayersGrid();
+            return;
+        }
+        
+        // Standard night action for other roles
         if (!this.selectedPlayer) {
             this.showNotification('❌ Chọn một người trước!');
+            return;
+        }
+        
+        // Validate connection
+        if (this.multiplayer.connections.length === 0 && !this.multiplayer.isHost) {
+            this.showNotification('❌ Mất kết nối! Vui lòng tải lại trang.');
             return;
         }
         
@@ -387,10 +513,17 @@ class WerewolfGame {
 
     /**
      * Submit vote
+     * SECURITY: Validate connection state before sending
      */
     submitVote() {
         if (!this.selectedPlayer) {
             this.showNotification('❌ Chọn một người để bỏ phiếu!');
+            return;
+        }
+        
+        // Validate connection
+        if (this.multiplayer.connections.length === 0 && !this.multiplayer.isHost) {
+            this.showNotification('❌ Mất kết nối! Vui lòng tải lại trang.');
             return;
         }
         
@@ -425,6 +558,87 @@ class WerewolfGame {
     }
 
     /**
+     * Check win condition (host only)
+     * Called after each night action or vote
+     */
+    checkWinCondition() {
+        if (!this.multiplayer.isHost) return null;
+        
+        const alivePlayers = this.multiplayer.players.filter(p => p.alive !== false);
+        const aliveWerewolves = alivePlayers.filter(p => p.role === 'werewolf');
+        const aliveVillagers = alivePlayers.filter(p => p.role !== 'werewolf');
+        
+        // Evil wins if werewolves equal or outnumber villagers
+        if (aliveWerewolves.length >= aliveVillagers.length && aliveWerewolves.length > 0) {
+            return 'evil';
+        }
+        
+        // Good wins if all werewolves are eliminated
+        if (aliveWerewolves.length === 0) {
+            return 'good';
+        }
+        
+        return null; // Game continues
+    }
+
+    /**
+     * End game and show winner (host only)
+     */
+    endGame(winner) {
+        if (!this.multiplayer.isHost) return;
+        
+        this.winner = winner;
+        this.gameState = 'finished';
+        
+        // Broadcast game over
+        this.multiplayer.updateGameState('finished', {
+            winner: winner,
+            phase: this.phase,
+            nightCount: this.nightCount,
+            dayCount: this.dayCount
+        });
+        
+        // Show game over UI locally
+        this.showGameOver(winner);
+    }
+
+    /**
+     * Show game over screen
+     */
+    showGameOver(winner) {
+        document.getElementById('game-section').classList.add('hidden');
+        document.getElementById('game-over-section').classList.remove('hidden');
+        
+        const winnerIcon = document.getElementById('winner-icon');
+        const winnerText = document.getElementById('winner-text');
+        
+        if (winner === 'good') {
+            winnerIcon.textContent = '🎉';
+            winnerText.textContent = '🏆 PHE DÂN LÀNG THẮNG!';
+            winnerText.style.color = '#4ade80';
+        } else if (winner === 'evil') {
+            winnerIcon.textContent = '🐺';
+            winnerText.textContent = '🩸 PHE MA SÓI THẮNG!';
+            winnerText.style.color = '#e94560';
+        } else {
+            winnerIcon.textContent = '🤝';
+            winnerText.textContent = 'HÒA!';
+            winnerText.style.color = '#aaa';
+        }
+        
+        this.addGameLog(`🏆 Game over! Phe ${winner === 'good' ? 'dân làng' : 'ma sói'} thắng!`);
+    }
+
+    /**
+     * Handle game over message from host
+     */
+    handleGameOver(data) {
+        this.winner = data.winner;
+        this.gameState = 'finished';
+        this.showGameOver(data.winner);
+    }
+
+    /**
      * Send chat message
      */
     sendChat() {
@@ -451,6 +665,7 @@ class WerewolfGame {
 
     /**
      * Add chat message
+     * SECURITY: Sanitize sender and message to prevent XSS
      */
     addChatMessage(sender, message, timestamp) {
         const messagesDiv = document.getElementById('chat-messages');
@@ -459,27 +674,41 @@ class WerewolfGame {
             minute: '2-digit' 
         });
         
-        messagesDiv.innerHTML += `
-            <div class="chat-message">
-                <div class="sender">${sender}</div>
-                <div>${message}</div>
-                <div class="time">${time}</div>
-            </div>
-        `;
+        // Create elements safely using DOM methods instead of innerHTML
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'chat-message';
+        
+        const senderDiv = document.createElement('div');
+        senderDiv.className = 'sender';
+        senderDiv.textContent = sender;
+        
+        const messageContent = document.createElement('div');
+        messageContent.textContent = message;
+        
+        const timeDiv = document.createElement('div');
+        timeDiv.className = 'time';
+        timeDiv.textContent = time;
+        
+        messageDiv.appendChild(senderDiv);
+        messageDiv.appendChild(messageContent);
+        messageDiv.appendChild(timeDiv);
+        messagesDiv.appendChild(messageDiv);
         
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
     /**
      * Add game log entry
+     * SECURITY: Use textContent to prevent XSS
      */
     addGameLog(message) {
         const logDiv = document.getElementById('game-log');
-        logDiv.innerHTML += `
-            <div class="chat-message">
-                <div>${message}</div>
-            </div>
-        `;
+        
+        const logEntry = document.createElement('div');
+        logEntry.className = 'chat-message';
+        logEntry.textContent = message;
+        
+        logDiv.appendChild(logEntry);
         logDiv.scrollTop = logDiv.scrollHeight;
     }
 
