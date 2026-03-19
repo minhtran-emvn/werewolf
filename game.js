@@ -63,33 +63,67 @@ class WerewolfGame {
 
         // Handle game state updates
         this.multiplayer.on('GAME_STATE_UPDATE', (data) => {
+            console.log('GAME_STATE_UPDATE received:', data);
+            
             this.gameState = data.gameState;
             this.phase = data.phase;
             this.nightCount = data.nightCount || 1;
             this.dayCount = data.dayCount || 0;
             
+            // Sync players
+            this.players = this.multiplayer.players;
+            
             // Transition from lobby/room to game section
             if (data.gameState === 'playing') {
-                document.getElementById('room-section')?.classList.add('hidden');
-                document.getElementById('game-section')?.classList.remove('hidden');
+                const roomSection = document.getElementById('room-section');
+                const gameSection = document.getElementById('game-section');
+                
+                if (roomSection) roomSection.classList.add('hidden');
+                if (gameSection) {
+                    gameSection.classList.remove('hidden');
+                    console.log('Game section shown');
+                }
+                
                 this.addGameLog('🌙 Đêm 1 bắt đầu!');
             }
             
+            // Update all UI components
             this.updateGameUI();
+            this.updatePlayersGrid();
         });
 
         // Handle role assignment
         this.multiplayer.on('ROLE_ASSIGNMENT', (data) => {
+            console.log('ROLE_ASSIGNMENT received:', data);
             if (data.playerId === this.myPlayerId) {
                 this.myRole = data.role;
                 this.showMyRole(data.role);
                 
+                // Sync players from multiplayer
+                this.players = this.multiplayer.players;
+                
                 // For clients, also transition to game section when role is assigned
                 // (host triggers game state update separately)
                 setTimeout(() => {
-                    document.getElementById('room-section')?.classList.add('hidden');
-                    document.getElementById('game-section')?.classList.remove('hidden');
-                }, 500);
+                    const roomSection = document.getElementById('room-section');
+                    const gameSection = document.getElementById('game-section');
+                    
+                    if (roomSection) roomSection.classList.add('hidden');
+                    if (gameSection) gameSection.classList.remove('hidden');
+                    
+                    // Initialize game state for clients
+                    if (!this.gameState || this.gameState === 'lobby') {
+                        this.gameState = 'playing';
+                        this.phase = 'night';
+                        this.nightCount = 1;
+                    }
+                    
+                    // Update UI
+                    this.updateGameUI();
+                    this.updatePlayersGrid();
+                    
+                    console.log('Client transitioned to game section, role:', this.myRole);
+                }, 300);
             }
         });
 
@@ -236,11 +270,17 @@ class WerewolfGame {
 
     /**
      * Start the game (host only)
+     * Fixed: Ensure players are synced before starting
      */
     startGame() {
         if (!this.multiplayer.isHost) return;
         
+        // Sync players first
+        this.players = this.multiplayer.players;
+        
         const playerCount = this.multiplayer.players.length;
+        console.log('Host starting game with', playerCount, 'players:', this.players);
+        
         const roles = this.generateRoles(playerCount);
         
         // Start game for all players
@@ -249,6 +289,7 @@ class WerewolfGame {
         // Assign my role locally
         const myPlayerIndex = this.multiplayer.players.findIndex(p => p.id === this.myPlayerId);
         this.myRole = roles[myPlayerIndex];
+        console.log('Host role:', this.myRole);
         this.showMyRole(this.myRole);
         
         // Update UI
@@ -260,6 +301,7 @@ class WerewolfGame {
         this.nightCount = 1;
         
         this.updateGameUI();
+        this.updatePlayersGrid();
         this.addGameLog('🌙 Đêm 1 bắt đầu!');
     }
 
@@ -490,10 +532,24 @@ class WerewolfGame {
     /**
      * Update players grid
      * SECURITY: Sanitize player names to prevent XSS
+     * Fixed: Use synced players array
      */
     updatePlayersGrid() {
         const grid = document.getElementById('players-grid');
-        const players = this.multiplayer.players;
+        if (!grid) {
+            console.error('players-grid element not found!');
+            return;
+        }
+        
+        // Use synced players array
+        const players = this.players || this.multiplayer.players || [];
+        
+        console.log('updatePlayersGrid:', players.length, 'players');
+        
+        if (players.length === 0) {
+            grid.innerHTML = '<p style="color: #aaa; text-align: center;">Không có người chơi</p>';
+            return;
+        }
         
         grid.innerHTML = players.map((player, index) => {
             const isDead = player.alive === false;
@@ -509,19 +565,44 @@ class WerewolfGame {
                 </div>
             `;
         }).join('');
+        
+        console.log('Players grid updated');
     }
 
     /**
      * Select a player for action
+     * Fixed: Allow selection even if gameState not fully synced
      */
     selectPlayer(playerId) {
-        if (this.gameState !== 'playing') return;
+        console.log('selectPlayer called:', playerId, 'gameState:', this.gameState);
         
-        const player = this.multiplayer.players.find(p => p.id === playerId);
-        if (!player || !player.alive) return;
+        // More lenient check - allow selection if we're in game section
+        const gameSection = document.getElementById('game-section');
+        if (!gameSection || gameSection.classList.contains('hidden')) {
+            console.log('Cannot select: game section not visible');
+            return;
+        }
+        
+        // Use this.players (synced from multiplayer)
+        const players = this.players || this.multiplayer.players || [];
+        const player = players.find(p => p.id === playerId);
+        
+        console.log('Found player:', player);
+        
+        if (!player) {
+            this.showNotification('❌ Không tìm thấy người chơi!');
+            return;
+        }
+        
+        if (player.alive === false) {
+            this.showNotification('❌ Người chơi đã chết!');
+            return;
+        }
         
         this.selectedPlayer = playerId;
+        console.log('Selected player:', playerId);
         this.updatePlayersGrid();
+        this.showNotification(`✅ Đã chọn ${player.name}`);
     }
 
     /**
