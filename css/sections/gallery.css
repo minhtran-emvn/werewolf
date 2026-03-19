@@ -1,0 +1,13 @@
+/* ===================================
+   Gallery Section
+   Phase 6 - To be implemented
+   =================================== */
+
+.gallery-content::before {
+    content: 'Gallery Section - Coming in Phase 6';
+    display: block;
+    padding: var(--space-12);
+    text-align: center;
+    color: var(--brown-muted);
+    font-style: italic;
+}
